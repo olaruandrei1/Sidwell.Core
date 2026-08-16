@@ -1,0 +1,7 @@
+**/bin
+**/obj
+Sidwell.Core.Algorithms/build
+**/.vs
+**/.idea
+**/*.user
+.env

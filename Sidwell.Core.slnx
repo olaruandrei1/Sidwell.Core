@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Sidwell.Core.Analytics/Sidwell.Core.Analytics.csproj" />
+    <Project Path="src/Sidwell.Core.Domain/Sidwell.Core.Domain.csproj" />
+    <Project Path="src/Sidwell.Core.Infrastructure/Sidwell.Core.Infrastructure.csproj" />
+    <Project Path="src/Sidwell.Core/Sidwell.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Sidwell.Core.Tests/Sidwell.Core.Tests.csproj" />
+  </Folder>
+</Solution>
