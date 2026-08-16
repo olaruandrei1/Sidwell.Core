@@ -44,39 +44,42 @@ public sealed class NativeRecalcService(
             new { id = tickerId }) ?? "UNKNOWN";
 
         NativeFundamentalSnapshot[] snapshots = await FetchFundamentalSnapshotsAsync(conn, tickerId, asOf, ct);
-        if (snapshots.Length < 1)
-        {
-            skipped.Add(new RecalcSkip("native_scoring", "No fundamental data available for ticker"));
-            return new RecalcResult(tickerId, asOf, ran, skipped);
-        }
+        bool hasFundamentals = snapshots.Length >= 1;
 
         IntPtr engine = SidwellQuantNative.sw_engine_create(1024 * 1024 * 4);
         try
         {
-            int loadRes = SidwellQuantNative.sw_load_fundamentals_raw(
-                engine,
-                symbol,
-                snapshots,
-                (nuint)snapshots.Length);
-
-            if (loadRes == 0)
+            if (hasFundamentals)
             {
-                NativeScoreResult[] scores = new NativeScoreResult[32];
-                nuint scoreCount = 32;
+                int loadRes = SidwellQuantNative.sw_load_fundamentals_raw(
+                    engine,
+                    symbol,
+                    snapshots,
+                    (nuint)snapshots.Length);
 
-                int scoreRes = SidwellQuantNative.sw_score_ticker(engine, symbol, scores, ref scoreCount);
-                if (scoreRes == 0 && scoreCount > 0)
+                if (loadRes == 0)
                 {
-                    await SaveNativeScoresAsync(conn, tickerId, asOf, scores, (int)scoreCount, ran, ct);
+                    NativeScoreResult[] scores = new NativeScoreResult[32];
+                    nuint scoreCount = 32;
+
+                    int scoreRes = SidwellQuantNative.sw_score_ticker(engine, symbol, scores, ref scoreCount);
+                    if (scoreRes == 0 && scoreCount > 0)
+                    {
+                        await SaveNativeScoresAsync(conn, tickerId, asOf, scores, (int)scoreCount, ran, ct);
+                    }
+                    else
+                    {
+                        skipped.Add(new RecalcSkip("native_scoring", "sw_score_ticker returned no results"));
+                    }
                 }
                 else
                 {
-                    skipped.Add(new RecalcSkip("native_scoring", "sw_score_ticker returned no results"));
+                    skipped.Add(new RecalcSkip("native_scoring", "sw_load_fundamentals_raw failed"));
                 }
             }
             else
             {
-                skipped.Add(new RecalcSkip("native_scoring", "sw_load_fundamentals_raw failed"));
+                skipped.Add(new RecalcSkip("native_scoring", "No fundamentals — falling back to technical-only composite"));
             }
 
             await LoadPricesToEngineAsync(conn, engine, symbol, tickerId, asOf);
@@ -103,20 +106,44 @@ public sealed class NativeRecalcService(
                     if (techRes != 0) tech = 0.0;
                 }
 
-                int compRes = SidwellQuantNative.sw_algo_composite(engine, symbol, tech, out NativeScoreResult compScore);
-                if (compRes == 0 && compScore.Status == 0)
+                double compositeValue;
+                NativeScoreResult compScore = default;
+                bool usedTechOnly = false;
+
+                if (hasFundamentals)
                 {
-                    string compDetailsJson = BuildCompositeDetails(compScore);
-                    await conn.ExecuteAsync(upsertCompositeSql, new
+                    int compRes = SidwellQuantNative.sw_algo_composite(engine, symbol, tech, out compScore);
+                    if (compRes == 0 && compScore.Status == 0)
                     {
-                        TickerId = tickerId,
-                        Score = Safe(compScore.Score),
-                        DetailsJson = compDetailsJson,
-                        AsOfDate = asOf,
-                        Philosophy = philName
-                    });
-                    ran.Add($"native_composite:{philName}");
+                        compositeValue = compScore.Score;
+                    }
+                    else
+                    {
+                        // Composite failed even with fundamentals — fall back to technical
+                        compositeValue = TechnicalToCompositeScale(tech);
+                        usedTechOnly = true;
+                    }
                 }
+                else
+                {
+                    // No fundamentals (e.g. BVB tickers) — use technical score mapped to 0..10 scale
+                    compositeValue = TechnicalToCompositeScale(tech);
+                    usedTechOnly = true;
+                }
+
+                string compDetailsJson = usedTechOnly
+                    ? BuildTechnicalOnlyDetails(compositeValue, tech)
+                    : BuildCompositeDetails(compScore);
+
+                await conn.ExecuteAsync(upsertCompositeSql, new
+                {
+                    TickerId = tickerId,
+                    Score = Safe(compositeValue),
+                    DetailsJson = compDetailsJson,
+                    AsOfDate = asOf,
+                    Philosophy = philName
+                });
+                ran.Add($"native_composite:{philName}{(usedTechOnly ? "(tech-only)" : "")}");
             }
 
             logger.LogInformation("NativeRecalc {Ticker} @ {AsOf}: {RanCount} ran, {SkipCount} skipped",
@@ -133,6 +160,48 @@ public sealed class NativeRecalcService(
     }
 
     private static double Safe(double v) => double.IsFinite(v) ? Math.Round(v, 4) : 0.0;
+
+    /// Maps technical score from [-100, 100] to composite [0, 10].
+    private static double TechnicalToCompositeScale(double tech)
+    {
+        if (!double.IsFinite(tech)) return 5.0;
+        double clamped = Math.Max(-100.0, Math.Min(100.0, tech));
+        return Math.Round((clamped + 100.0) / 20.0, 4); // -100→0, 0→5, +100→10
+    }
+
+    private static string BuildTechnicalOnlyDetails(double compositeValue, double techRaw)
+    {
+        string label = compositeValue switch
+        {
+            >= 8.0 => "Strong Technical",
+            >= 6.5 => "Positive Technical",
+            >= 5.0 => "Neutral Technical",
+            >= 3.5 => "Weak Technical",
+            _ => "Bearish Technical"
+        };
+        string color = compositeValue switch
+        {
+            >= 8.0 => "#10B981",
+            >= 6.5 => "#34D399",
+            >= 5.0 => "#EAB308",
+            >= 3.5 => "#F59E0B",
+            _ => "#EF4444"
+        };
+        var obj = new
+        {
+            outputs = new
+            {
+                label,
+                color,
+                overridden = false,
+                confidence = 0.5,
+                interpretation = "Technical-only score (no fundamentals available for this ticker)",
+                rawValue = Safe(techRaw),
+                technicalOnly = true
+            }
+        };
+        return JsonSerializer.Serialize(obj);
+    }
 
     private static string BuildCompositeDetails(NativeScoreResult r)
     {
