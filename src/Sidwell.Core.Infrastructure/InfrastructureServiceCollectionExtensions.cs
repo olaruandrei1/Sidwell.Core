@@ -4,7 +4,9 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sidwell.Core.Infrastructure.Data;
+using Sidwell.Core.Infrastructure.Indicators;
 using Sidwell.Core.Infrastructure.Recalc;
+using Sidwell.Core.Infrastructure.Verdict;
 
 namespace Sidwell.Core.Infrastructure;
 
@@ -20,6 +22,8 @@ public static class InfrastructureServiceCollectionExtensions
                    .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<IRecalcService, NativeRecalcService>();
+        services.AddScoped<IIndicatorService, NativeIndicatorService>();
+        services.AddScoped<IVerdictService, NativeVerdictService>();
 
         return services;
     }

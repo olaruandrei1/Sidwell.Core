@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Prometheus;
+using Sidwell.Core;
 using Sidwell.Core.Broadcast;
 using Sidwell.Core.Infrastructure;
 using Sidwell.Core.Infrastructure.Broadcast;
@@ -13,6 +14,9 @@ string connectionString = builder.Configuration.GetConnectionString("Sidwell")
 string internalSecret = builder.Configuration["Internal:Secret"]
     ?? builder.Configuration["INTERNAL_SECRET"]
     ?? "sidwell-internal-dev";
+
+builder.Services.AddSingleton(new InternalSecretOptions(internalSecret));
+builder.Services.AddControllers();
 
 builder.Services.AddSidwellInfrastructure(connectionString);
 
@@ -57,6 +61,8 @@ app.MapPost("/recalc/{tickerId:guid}", async (
     RecalcResult result = await recalc.RecalcTickerAsync(tickerId, date, technicalScore, ct);
     return Results.Ok(result);
 });
+
+app.MapControllers();
 
 app.MapMetrics("/metrics");
 

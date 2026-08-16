@@ -69,6 +69,33 @@ public unsafe struct NativeScoreResult
     }
 }
 
+[StructLayout(LayoutKind.Sequential)]
+public struct NativeIndicatorSignal
+{
+    public int Kind;
+    public double Primary;
+    public double Secondary;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct NativeTechnicalVerdict
+{
+    public double RawScore;
+    public double ConvictionPct;
+    public int Action;
+    public double AgreementPct;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct NativeReentryEstimate
+{
+    public int Available;
+    public int EstimatedDays;
+    public int SampleCount;
+    public double TargetPrice;
+    public double CurrentDeviationPct;
+}
+
 public static partial class SidwellQuantNative
 {
     private const string LibraryName = "sidwell_core_algorithms";
@@ -126,4 +153,41 @@ public static partial class SidwellQuantNative
         int philosophy,
         out double outScore
     );
+
+    [LibraryImport(LibraryName)]
+    public static partial int sw_ind_sma(IntPtr engine, [In] double[] input, nuint n, int period, [Out] double[] outRes);
+
+    [LibraryImport(LibraryName)]
+    public static partial int sw_ind_ema(IntPtr engine, [In] double[] input, nuint n, int period, [Out] double[] outRes);
+
+    [LibraryImport(LibraryName)]
+    public static partial int sw_ind_rsi(IntPtr engine, [In] double[] input, nuint n, int period, [Out] double[] outRes);
+
+    [LibraryImport(LibraryName)]
+    public static partial int sw_ind_macd(
+        IntPtr engine, [In] double[] input, nuint n, int fastPeriod, int slowPeriod, int signalPeriod, [Out] double[] outRes);
+
+    [LibraryImport(LibraryName)]
+    public static partial int sw_ind_bollinger(
+        IntPtr engine, [In] double[] input, nuint n, int period, double stdDev, [Out] double[] outRes);
+
+    [LibraryImport(LibraryName)]
+    public static partial int sw_ind_atr(
+        IntPtr engine, [In] double[] high, [In] double[] low, [In] double[] close, nuint n, int period, [Out] double[] outRes);
+
+    [LibraryImport(LibraryName)]
+    public static partial int sw_ind_adx(
+        IntPtr engine, [In] double[] high, [In] double[] low, [In] double[] close, nuint n, int period, [Out] double[] outRes);
+
+    [LibraryImport(LibraryName)]
+    public static partial int sw_ind_obv(
+        IntPtr engine, [In] double[] close, [In] double[] volume, nuint n, [Out] double[] outRes);
+
+    [LibraryImport(LibraryName)]
+    public static partial int sw_technical_verdict(
+        IntPtr engine, double compositeScore, [In] NativeIndicatorSignal[] signals, nuint signalCount, out NativeTechnicalVerdict outVerdict);
+
+    [LibraryImport(LibraryName)]
+    public static partial int sw_estimate_reentry(
+        IntPtr engine, [In] double[] close, nuint closeLen, [In] double[] sma, nuint smaLen, out NativeReentryEstimate outEstimate);
 }
