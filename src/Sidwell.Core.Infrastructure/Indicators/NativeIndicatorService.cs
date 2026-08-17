@@ -43,6 +43,10 @@ public sealed partial class NativeIndicatorService(SidwellDbContext db) : IIndic
                 double[] outRes = new double[n - period + 1];
                 if (SidwellQuantNative.sw_ind_sma(engine, bars.Close, (nuint)n, period, outRes) != 0)
                     return Fail(raw, "Computation failed");
+                double manualCheck = bars.Close.Skip(n - period).Take(period).Average();
+                Console.Error.WriteLine(
+                    $"[SMA-DEBUG] n={n} period={period} bars.Close[^1]={bars.Close[^1]} bars.Dates[^1]={bars.Dates[^1]} " +
+                    $"outRes.Length={outRes.Length} outRes[0]={outRes[0]} outRes[^1]={outRes[^1]} manualLast20Avg={manualCheck}");
                 return Build("sma", period, bars.Dates, outRes, 1, ["value"], LatestVsPriceTrend(bars, outRes, 1, 0));
             }
             case "ema":
