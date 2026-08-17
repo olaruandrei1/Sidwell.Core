@@ -19,7 +19,6 @@ public sealed class SidwellDbContext(DbContextOptions<SidwellDbContext> options)
     public DbSet<WatchlistEntry> Watchlist => Set<WatchlistEntry>();
     public DbSet<PortfolioTarget> PortfolioTargets => Set<PortfolioTarget>();
     public DbSet<TickerNote> TickerNotes => Set<TickerNote>();
-    public DbSet<ScreenerPreset> ScreenerPresets => Set<ScreenerPreset>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<UserSetting> UserSettings => Set<UserSetting>();
     public DbSet<SyncJob> SyncJobs => Set<SyncJob>();
@@ -249,18 +248,6 @@ public sealed class SidwellDbContext(DbContextOptions<SidwellDbContext> options)
             e.HasOne<Ticker>().WithMany().HasForeignKey(x => x.TickerId).OnDelete(DeleteBehavior.Cascade);
         });
 
-        b.Entity<ScreenerPreset>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Id).HasDefaultValueSql(genUuid);
-            e.Property(x => x.Name).HasMaxLength(100);
-            e.Property(x => x.Criteria).HasColumnType("jsonb").HasDefaultValueSql(emptyJson);
-            e.Property(x => x.CreatedAt).HasDefaultValueSql(now);
-            e.HasIndex(x => new { x.UserId, x.Name }).IsUnique();
-            e.HasIndex(x => x.UserId);
-            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
         b.Entity<Notification>(e =>
         {
             e.HasKey(x => x.Id);
@@ -365,8 +352,6 @@ public sealed class SidwellDbContext(DbContextOptions<SidwellDbContext> options)
         });
 
         const string emptyJsonArray = "'[]'::jsonb";
-        const string categoryTypeSet =
-            "IN ('LOAN', 'SUBSCRIPTION', 'UTILITY', 'VARIABLE', 'FOOD', 'CIGARETTES', 'OTHER')";
 
         b.Entity<FinanceSetting>(e =>
         {
@@ -375,10 +360,14 @@ public sealed class SidwellDbContext(DbContextOptions<SidwellDbContext> options)
             e.Property(x => x.MonthlyIncomeCurrency).HasColumnType("char(3)");
             e.Property(x => x.Banks).HasColumnType("jsonb").HasDefaultValueSql(emptyJsonArray);
             e.Property(x => x.Brokers).HasColumnType("jsonb").HasDefaultValueSql(emptyJsonArray);
+            e.Property(x => x.CategoryTypes).HasColumnType("jsonb").HasDefaultValueSql(emptyJsonArray);
             e.Property(x => x.UpdatedAt).HasDefaultValueSql(now);
             e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        // The category "type" bucket used to be a fixed 7-value CHECK constraint; it's now user-extensible
+        // (custom types live in finance_settings.category_types), so the DB no longer constrains the value —
+        // FinanceService.NormalizeCategoryType is the validation boundary (builtin types ∪ the user's custom ones).
         b.Entity<FinanceCategory>(e =>
         {
             e.HasKey(x => x.Id);
@@ -386,7 +375,6 @@ public sealed class SidwellDbContext(DbContextOptions<SidwellDbContext> options)
             e.Property(x => x.Name).HasMaxLength(120);
             e.Property(x => x.Type).HasMaxLength(20);
             e.Property(x => x.IsDefault).HasDefaultValue(false);
-            e.ToTable(t => t.HasCheckConstraint("ck_finance_categories_type", $"type {categoryTypeSet}"));
             e.HasIndex(x => new { x.UserId, x.Name, x.Type }).IsUnique();
             e.HasIndex(x => x.UserId);
             e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
@@ -409,7 +397,6 @@ public sealed class SidwellDbContext(DbContextOptions<SidwellDbContext> options)
             e.Property(x => x.LineItems).HasColumnType("jsonb");
             e.ToTable(t =>
             {
-                t.HasCheckConstraint("ck_expenses_type", $"type {categoryTypeSet}");
                 t.HasCheckConstraint("ck_expenses_status", "status IN ('PAID', 'DUE', 'PENDING')");
                 t.HasCheckConstraint("ck_expenses_amount", "amount >= 0");
             });

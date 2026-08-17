@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Sidwell.Core.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Sidwell.Core.Infrastructure.Data;
 namespace Sidwell.Core.Infrastructure.Migrations
 {
     [DbContext(typeof(SidwellDbContext))]
-    partial class SidwellDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260817161153_DropScreenerPresets")]
+    partial class DropScreenerPresets
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -365,6 +368,8 @@ namespace Sidwell.Core.Infrastructure.Migrations
                             t.HasCheckConstraint("ck_expenses_amount", "amount >= 0");
 
                             t.HasCheckConstraint("ck_expenses_status", "status IN ('PAID', 'DUE', 'PENDING')");
+
+                            t.HasCheckConstraint("ck_expenses_type", "type IN ('LOAN', 'SUBSCRIPTION', 'UTILITY', 'VARIABLE', 'FOOD', 'CIGARETTES', 'OTHER')");
                         });
                 });
 
@@ -464,7 +469,10 @@ namespace Sidwell.Core.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_finance_categories_user_id_name_type");
 
-                    b.ToTable("finance_categories", (string)null);
+                    b.ToTable("finance_categories", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_finance_categories_type", "type IN ('LOAN', 'SUBSCRIPTION', 'UTILITY', 'VARIABLE', 'FOOD', 'CIGARETTES', 'OTHER')");
+                        });
                 });
 
             modelBuilder.Entity("Sidwell.Core.Domain.Entities.FinanceSetting", b =>
@@ -485,13 +493,6 @@ namespace Sidwell.Core.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("jsonb")
                         .HasColumnName("brokers")
-                        .HasDefaultValueSql("'[]'::jsonb");
-
-                    b.Property<string>("CategoryTypes")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("category_types")
                         .HasDefaultValueSql("'[]'::jsonb");
 
                     b.Property<decimal>("MonthlyIncomeAmount")

@@ -49,6 +49,14 @@ public sealed class NativeRecalcService(
         IntPtr engine = SidwellQuantNative.sw_engine_create(1024 * 1024 * 4);
         try
         {
+            // Prices must be loaded before scoring — algo_momentum (and others) read
+            // engine-resident price series, and sw_score_ticker is safe to call even
+            // without fundamentals: each algorithm self-reports SW_ERR_INSUFFICIENT_DATA
+            // when its own required inputs are missing (see SaveNativeScoresAsync's
+            // per-result Status filter), so price/dividend-only algos like momentum can
+            // still run for fundamentals-less tickers (e.g. BVB).
+            await LoadPricesToEngineAsync(conn, engine, symbol, tickerId, asOf);
+
             if (hasFundamentals)
             {
                 int loadRes = SidwellQuantNative.sw_load_fundamentals_raw(
@@ -57,32 +65,28 @@ public sealed class NativeRecalcService(
                     snapshots,
                     (nuint)snapshots.Length);
 
-                if (loadRes == 0)
-                {
-                    NativeScoreResult[] scores = new NativeScoreResult[32];
-                    nuint scoreCount = 32;
-
-                    int scoreRes = SidwellQuantNative.sw_score_ticker(engine, symbol, scores, ref scoreCount);
-                    if (scoreRes == 0 && scoreCount > 0)
-                    {
-                        await SaveNativeScoresAsync(conn, tickerId, asOf, scores, (int)scoreCount, ran, ct);
-                    }
-                    else
-                    {
-                        skipped.Add(new RecalcSkip("native_scoring", "sw_score_ticker returned no results"));
-                    }
-                }
-                else
+                if (loadRes != 0)
                 {
                     skipped.Add(new RecalcSkip("native_scoring", "sw_load_fundamentals_raw failed"));
                 }
             }
             else
             {
-                skipped.Add(new RecalcSkip("native_scoring", "No fundamentals — falling back to technical-only composite"));
+                skipped.Add(new RecalcSkip("native_scoring", "No fundamentals — fundamentals-dependent algorithms will self-report insufficient data"));
             }
 
-            await LoadPricesToEngineAsync(conn, engine, symbol, tickerId, asOf);
+            NativeScoreResult[] scores = new NativeScoreResult[32];
+            nuint scoreCount = 32;
+
+            int scoreRes = SidwellQuantNative.sw_score_ticker(engine, symbol, scores, ref scoreCount);
+            if (scoreRes == 0 && scoreCount > 0)
+            {
+                await SaveNativeScoresAsync(conn, tickerId, asOf, scores, (int)scoreCount, ran, ct);
+            }
+            else
+            {
+                skipped.Add(new RecalcSkip("native_scoring", "sw_score_ticker returned no results"));
+            }
 
             const string upsertCompositeSql = """
                 INSERT INTO algorithm_scores (ticker_id, algorithm_name, score, details, as_of_date, philosophy)

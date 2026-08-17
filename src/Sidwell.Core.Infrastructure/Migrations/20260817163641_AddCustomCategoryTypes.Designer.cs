@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Sidwell.Core.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Sidwell.Core.Infrastructure.Data;
 namespace Sidwell.Core.Infrastructure.Migrations
 {
     [DbContext(typeof(SidwellDbContext))]
-    partial class SidwellDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260817163641_AddCustomCategoryTypes")]
+    partial class AddCustomCategoryTypes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -19,4 +19,3 @@
 \i 018_api_credentials.sql
 \i 019_exchange_rates.sql
 \i 020_portfolio_targets.sql
-\i 021_screener_presets.sql
